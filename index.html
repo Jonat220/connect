@@ -54,6 +54,9 @@
         <!-- Create Post Section -->
         <div class="create-post-section">
             <div class="post-form">
+                <label for="postImage" style="margin-bottom: 0.5rem; display: block; font-weight: 500; color: #1a73e8; cursor: pointer;">Choose Image</label>
+                <input type="file" id="postImage" accept="image/*" style="margin-bottom: 1rem; display: block;">
+                <img id="imagePreview" src="" alt="Image Preview" style="display:none; max-width:100%; margin-bottom:1rem;" />
                 <textarea id="postContent" placeholder="What's on your mind?"></textarea>
                 <div class="post-actions">
                     <button onclick="createPost()" class="post-btn">

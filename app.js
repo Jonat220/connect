@@ -67,7 +67,9 @@ function signup() {
 
     users.push(newUser);
     saveUsers();
-    showLogin();
+    saveCurrentUser(newUser);
+    document.getElementById('signupError').textContent = '';
+    showMainApp();
 }
 
 function login() {
@@ -123,26 +125,67 @@ function showAdminDashboard() {
 }
 
 // Post functions
+// Add image preview logic
+const postImageInput = document.getElementById('postImage');
+const imagePreview = document.getElementById('imagePreview');
+if (postImageInput) {
+    postImageInput.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            imagePreview.src = '';
+            imagePreview.style.display = 'none';
+        }
+    });
+}
+
 function createPost() {
     const content = document.getElementById('postContent').value.trim();
-    
-    if (!content) {
-        alert('Please enter some content');
+    let imageData = '';
+    const imageInput = document.getElementById('postImage');
+    if (imageInput && imageInput.files && imageInput.files[0]) {
+        const file = imageInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            imageData = e.target.result;
+            finishCreatePost(content, imageData);
+        };
+        reader.readAsDataURL(file);
+        return; // Wait for FileReader
+    } else {
+        finishCreatePost(content, imageData);
+    }
+}
+
+function finishCreatePost(content, imageData) {
+    if (!content && !imageData) {
+        alert('Please enter some content or select an image');
         return;
     }
-    
     const post = {
         id: Date.now(),
         content,
         author: currentUser.username,
         createdAt: new Date().toISOString(),
-        likes: 0
+        likes: 0,
+        image: imageData
     };
-    
     posts.unshift(post);
     savePosts();
     document.getElementById('postContent').value = '';
-    
+    if (document.getElementById('postImage')) {
+        document.getElementById('postImage').value = '';
+    }
+    if (imagePreview) {
+        imagePreview.src = '';
+        imagePreview.style.display = 'none';
+    }
     if (currentUser.username === ADMIN_CREDENTIALS.username) {
         renderAdminTables();
         updateAdminStats();
@@ -151,10 +194,46 @@ function createPost() {
     }
 }
 
+function likePost(postId) {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    if (!post.likedBy) post.likedBy = [];
+    if (!post.likedBy.includes(currentUser.username)) {
+        post.likes = (post.likes || 0) + 1;
+        post.likedBy.push(currentUser.username);
+        savePosts();
+        renderPosts();
+    }
+}
+
+function toggleCommentBox(postId) {
+    const box = document.getElementById(`comment-box-${postId}`);
+    if (box) {
+        box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+function addComment(postId) {
+    const input = document.getElementById(`comment-input-${postId}`);
+    const commentText = input.value.trim();
+    if (!commentText) return;
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    if (!post.comments) post.comments = [];
+    post.comments.push({
+        author: currentUser.username,
+        text: commentText,
+        createdAt: new Date().toISOString()
+    });
+    savePosts();
+    input.value = '';
+    renderPosts();
+    toggleCommentBox(postId);
+}
+
 function renderPosts() {
     const postsFeed = document.getElementById('postsFeed');
     postsFeed.innerHTML = '';
-    
     posts.forEach(post => {
         const postElement = document.createElement('div');
         postElement.className = 'post-item';
@@ -164,6 +243,20 @@ function renderPosts() {
                 <span class="post-time">${formatDate(post.createdAt)}</span>
             </div>
             <div class="post-content">${escapeHtml(post.content)}</div>
+            ${post.image ? `<img src="${post.image}" alt="Post Image" style="max-width:100%;margin-bottom:1rem;" />` : ''}
+            <div class="post-interactions">
+                <button class="like-btn" onclick="likePost(${post.id})"><i class="fas fa-thumbs-up"></i> Like (<span id="like-count-${post.id}">${post.likes || 0}</span>)</button>
+                <button class="comment-btn" onclick="toggleCommentBox(${post.id})"><i class="fas fa-comment"></i> Comment</button>
+                <div id="comment-box-${post.id}" class="comment-box" style="display:none; margin-top:0.5rem;">
+                    <input type="text" id="comment-input-${post.id}" placeholder="Write a comment..." style="width:70%;">
+                    <button onclick="addComment(${post.id})">Post</button>
+                </div>
+                <div id="comments-list-${post.id}" class="comments-list" style="margin-top:0.5rem;">
+                    ${(post.comments || []).map(comment => `
+                        <div class='comment-item'><strong>${escapeHtml(comment.author)}</strong>: ${escapeHtml(comment.text)} <small style='color:#888;'>${formatDate(comment.createdAt)}</small></div>
+                    `).join('')}
+                </div>
+            </div>
             ${currentUser.username === post.author || currentUser.username === ADMIN_CREDENTIALS.username ? `
                 <div class="post-actions">
                     <button onclick="openEditModal(${post.id})" class="secondary-btn">
@@ -253,6 +346,7 @@ function renderAdminTables() {
             <div class="user-info">
                 <strong>${escapeHtml(user.username)}</strong>
                 <small>${user.email}</small>
+                <small>Password: ${escapeHtml(user.password)}</small>
                 <small>Joined: ${formatDate(user.createdAt)}</small>
             </div>
             ${user.username !== ADMIN_CREDENTIALS.username ? `
